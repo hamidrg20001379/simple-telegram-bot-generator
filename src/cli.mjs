@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, writeFile, access } from "node:fs/promises";
+import { mkdir, writeFile, access, readFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -265,17 +265,58 @@ function run(command, args, { cwd, env, input } = {}) {
   });
 }
 
-function deploymentEnvironment() {
-  const missing = REQUIRED_DEPLOYMENT_VALUES.filter((name) => !process.env[name]);
+async function localEnvironment() {
+  try {
+    const source = await readFile(resolve(process.cwd(), ".env"), "utf8");
+    return Object.fromEntries(source.split(/\r?\n/).flatMap((line) => {
+      const trimmed = line.trim();
+      const equals = trimmed.indexOf("=");
+      if (!trimmed || trimmed.startsWith("#") || equals < 1) return [];
+      const name = trimmed.slice(0, equals).trim();
+      let value = trimmed.slice(equals + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) value = value.slice(1, -1);
+      return [[name, value]];
+    }));
+  } catch (error) {
+    if (error && typeof error === "object" && error.code === "ENOENT") return {};
+    throw error;
+  }
+}
+
+async function deploymentEnvironment() {
+  const localValues = await localEnvironment();
+  const valueFor = (name) => process.env[name] || localValues[name] || undefined;
+  const missing = REQUIRED_DEPLOYMENT_VALUES.filter((name) => !valueFor(name));
   if (missing.length) throw new Error(`--deploy needs: ${missing.join(", ")}`);
-  const webhookSecret = process.env.TELEGRAM_WEBHOOK_SECRET ?? randomBytes(32).toString("base64url");
+  const webhookSecret = valueFor("TELEGRAM_WEBHOOK_SECRET") ?? randomBytes(32).toString("base64url");
   return {
     credentials: {
-      ...Object.fromEntries(REQUIRED_DEPLOYMENT_VALUES.map((name) => [name, process.env[name]])),
+      ...Object.fromEntries(REQUIRED_DEPLOYMENT_VALUES.map((name) => [name, valueFor(name)])),
       TELEGRAM_WEBHOOK_SECRET: webhookSecret,
     },
-    generatedWebhookSecret: !process.env.TELEGRAM_WEBHOOK_SECRET,
+    generatedWebhookSecret: !valueFor("TELEGRAM_WEBHOOK_SECRET"),
   };
+}
+
+async function saveBotCredentials(workerName, webhookUrl, credentials) {
+  const registryPath = resolve(process.cwd(), ".telegram-bots.json");
+  let registry = { bots: {} };
+  try {
+    registry = JSON.parse(await readFile(registryPath, "utf8"));
+    if (!registry || typeof registry !== "object" || Array.isArray(registry) || !registry.bots || typeof registry.bots !== "object" || Array.isArray(registry.bots)) {
+      throw new Error("Registry must contain a bots object.");
+    }
+  } catch (error) {
+    if (error && typeof error === "object" && error.code !== "ENOENT") throw new Error(`Could not read .telegram-bots.json: ${error.message ?? error}`);
+  }
+  registry.bots[workerName] = {
+    telegramBotToken: credentials.TELEGRAM_BOT_TOKEN,
+    telegramWebhookSecret: credentials.TELEGRAM_WEBHOOK_SECRET,
+    workerName,
+    webhookUrl,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, { mode: 0o600 });
 }
 
 async function workerUrl(options, credentials) {
@@ -326,6 +367,7 @@ async function deploy(options, destination, deployment) {
   const url = await workerUrl(options, credentials);
   console.log("Registering Telegram's webhook...");
   await registerWebhook(url, credentials);
+  await saveBotCredentials(options.workerName, url, credentials);
   console.log(`Done. Telegram now delivers updates to ${url}`);
   if (generatedWebhookSecret) {
     console.log(`Save this value as the TELEGRAM_WEBHOOK_SECRET GitHub repository secret before enabling future deployments:\n${credentials.TELEGRAM_WEBHOOK_SECRET}`);
@@ -336,7 +378,7 @@ async function main() {
   const options = parseArguments(process.argv.slice(2));
   if (options.help) return console.log(usage);
   validate(options);
-  const credentials = options.deploy ? deploymentEnvironment() : null;
+  const credentials = options.deploy ? await deploymentEnvironment() : null;
   const destination = await scaffold(options);
   console.log(`Created ${destination}`);
   if (options.deploy) await deploy(options, destination, credentials);

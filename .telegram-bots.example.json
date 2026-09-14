@@ -1,0 +1,11 @@
+{
+  "bots": {
+    "my-first-bot": {
+      "telegramBotToken": "",
+      "telegramWebhookSecret": "",
+      "workerName": "my-first-bot",
+      "webhookUrl": "https://my-first-bot.example.workers.dev/webhook",
+      "updatedAt": ""
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 This command creates a small TypeScript Cloudflare Worker, a secure Telegram webhook endpoint, and a GitHub Actions deployment workflow. With `--deploy`, it also does the first deployment and connects Telegram to the Worker.
 
-It never writes your Cloudflare or Telegram credentials into the generated project. The two Telegram values are stored as Cloudflare Worker secrets.
+It never writes credentials into the generated Worker project. Cloudflare account credentials stay in local `.env`; each bot's Telegram credentials and webhook details are kept in local `.telegram-bots.json`. Both files are ignored by Git.
 
 ## Create a bot project
 
@@ -14,7 +14,7 @@ This creates `./my-first-bot`. Change `src/index.ts` to give the bot its actual 
 
 ## Create and connect the first deployment
 
-Set these temporary shell environment variables: `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_API_TOKEN`, and `TELEGRAM_BOT_TOKEN`. `TELEGRAM_WEBHOOK_SECRET` is optional; if you omit it, the generator creates a secure value, sends it to Cloudflare and Telegram, then displays it once so you can save it for future GitHub deployments. Then run:
+Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in local `.env`. Provide the new bot's `TELEGRAM_BOT_TOKEN` as a temporary shell environment variable. `TELEGRAM_WEBHOOK_SECRET` is optional; if you omit it, the generator creates a secure value. After deployment, the generator saves the bot token, webhook secret, Worker name, and webhook URL in local `.telegram-bots.json`.
 
 ```powershell
 npm run create -- init my-first-bot --deploy --workers-subdomain your-workers-subdomain
