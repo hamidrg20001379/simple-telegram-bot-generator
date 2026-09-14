@@ -1,0 +1,15 @@
+{
+  "name": "simple-telegram-bot-generator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "create-telegram-worker": "src/cli.mjs"
+  },
+  "scripts": {
+    "create": "node src/cli.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
