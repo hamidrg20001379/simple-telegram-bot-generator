@@ -2,7 +2,7 @@
 
 This command creates a small TypeScript Cloudflare Worker, a secure Telegram webhook endpoint, and a GitHub Actions deployment workflow. With `--deploy`, it also does the first deployment and connects Telegram to the Worker.
 
-It never writes credentials into the generated Worker project. Cloudflare account credentials stay in local `.env`; each bot's Telegram credentials and webhook details are kept in local `.telegram-bots.json`. Both files are ignored by Git.
+With `--deploy`, the command asks for any missing Cloudflare account ID, Cloudflare API token, and Telegram bot token. It saves them, along with the webhook secret and URL, in the generated project's ignored `.env` file.
 
 ## Create a bot project
 
@@ -14,7 +14,7 @@ This creates `./my-first-bot`. Change `src/index.ts` to give the bot its actual 
 
 ## Create and connect the first deployment
 
-Set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in local `.env`. Provide the new bot's `TELEGRAM_BOT_TOKEN` as a temporary shell environment variable. `TELEGRAM_WEBHOOK_SECRET` is optional; if you omit it, the generator creates a secure value. After deployment, the generator saves the bot token, webhook secret, Worker name, and webhook URL in local `.telegram-bots.json`.
+Run the command and enter any missing credentials when asked. Existing shell or generator `.env` values are still used. `TELEGRAM_WEBHOOK_SECRET` remains optional; the generator creates it when absent.
 
 ```powershell
 npm run create -- init my-first-bot --deploy --workers-subdomain your-workers-subdomain
@@ -29,6 +29,7 @@ The `--deploy` path performs this sequence:
 3. Stores the Telegram bot token and webhook secret in Cloudflare as Worker secrets.
 4. Determines the public `/webhook` URL.
 5. Calls Telegram `setWebhook` with that URL and the matching secret.
+6. Saves all deployment credentials and that URL in the created project's ignored `.env`.
 
 Future changes can be deployed with the generated GitHub Actions workflow. Add the four values above as repository secrets and set the non-secret `TELEGRAM_WEBHOOK_URL` repository variable to the final URL ending in `/webhook`.
 

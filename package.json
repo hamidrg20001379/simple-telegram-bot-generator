@@ -7,7 +7,8 @@
     "create-telegram-worker": "src/cli.mjs"
   },
   "scripts": {
-    "create": "node src/cli.mjs"
+    "create": "node src/cli.mjs",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
