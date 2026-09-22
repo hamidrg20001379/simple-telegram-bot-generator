@@ -128,7 +128,7 @@ export function wranglerConfig(name, databaseId = null) {
 `;
 }
 
-const workerSource = `interface Env {
+export const workerSource = `interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
   DB: D1Database;
@@ -138,25 +138,45 @@ type TelegramUpdate = {
   message?: { chat: { id: number }; text?: string };
 };
 
-async function sendMessage(env: Env, chatId: number, text: string) {
+async function sendMessage(env: Env, chatId: number, text: string, replyMarkup?: object) {
   const response = await fetch(\`https://api.telegram.org/bot\${env.TELEGRAM_BOT_TOKEN}/sendMessage\`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      ...(replyMarkup ? { reply_markup: replyMarkup } : {}),
+    }),
   });
   if (!response.ok) throw new Error(\`Telegram sendMessage failed: \${response.status}\`);
 }
+
+const replyKeyboard = {
+  keyboard: [["📋 Menu", "ℹ️ Help"]],
+  resize_keyboard: true,
+  is_persistent: true,
+};
 
 async function handleUpdate(env: Env, update: TelegramUpdate) {
   const message = update.message;
   if (!message?.text) return;
 
   if (message.text === "/start") {
-    await sendMessage(env, message.chat.id, "Hello! Your Cloudflare Telegram bot is ready.");
+    await sendMessage(env, message.chat.id, "Hello! Your Cloudflare Telegram bot is ready. Choose an option below.", replyKeyboard);
     return;
   }
 
-  await sendMessage(env, message.chat.id, \`You said: \${message.text}\`);
+  if (message.text === "📋 Menu") {
+    await sendMessage(env, message.chat.id, "Menu: use the buttons below to interact with your bot.", replyKeyboard);
+    return;
+  }
+
+  if (message.text === "ℹ️ Help") {
+    await sendMessage(env, message.chat.id, "Send a message and I will echo it back to you.", replyKeyboard);
+    return;
+  }
+
+  await sendMessage(env, message.chat.id, \`You said: \${message.text}\`, replyKeyboard);
 }
 
 export default {
@@ -243,7 +263,7 @@ jobs:
 
 const readme = `# Generated Telegram Worker
 
-This Worker accepts Telegram webhooks at \`/webhook\`, validates Telegram's secret header, echoes received text, and includes a default Cloudflare D1 database binding named \`DB\`.
+This Worker accepts Telegram webhooks at \`/webhook\`, validates Telegram's secret header, echoes received text, and includes a default Cloudflare D1 database binding named \`DB\`. On \`/start\`, it also shows persistent reply-keyboard options below the chat: \`📋 Menu\` and \`ℹ️ Help\`.
 
 ## Local development
 

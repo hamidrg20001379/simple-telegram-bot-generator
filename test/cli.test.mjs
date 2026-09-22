@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, wranglerConfig } from "../src/cli.mjs";
+import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, wranglerConfig, workerSource } from "../src/cli.mjs";
 import { credentialInstructions, parseEnv, validateBotToken, validateCredential, validateWorkerName } from "../src/manager.mjs";
 
 test("Cloudflare token help states the minimum account permissions", () => {
@@ -46,6 +46,14 @@ test("generated Wrangler config includes a D1 database binding by default", () =
 test("generated Wrangler config uses the provisioned D1 database ID", () => {
   const config = wranglerConfig("my-first-bot", "01234567-89ab-cdef-0123-456789abcdef");
   assert.match(config, /\"database_id\": \"01234567-89ab-cdef-0123-456789abcdef\"/);
+});
+
+test("generated Worker sends a reply keyboard below the Telegram chat", () => {
+  assert.match(workerSource, /reply_markup/);
+  assert.match(workerSource, /keyboard: \[\[/);
+  assert.match(workerSource, /resize_keyboard: true/);
+  assert.match(workerSource, /📋 Menu/);
+  assert.match(workerSource, /ℹ️ Help/);
 });
 
 test("manager parses quoted environment values", () => {
