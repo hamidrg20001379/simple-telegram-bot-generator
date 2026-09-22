@@ -392,6 +392,10 @@ async function localEnvironment(path = resolve(process.cwd(), ".env")) {
   }
 }
 
+export function selectD1Database(databases, name) {
+  return databases.find((database) => database?.name === name);
+}
+
 async function provisionD1Database(options, credentials, destination) {
   const configPath = resolve(destination, "wrangler.jsonc");
   const config = JSON.parse(await readFile(configPath, "utf8"));
@@ -399,12 +403,25 @@ async function provisionD1Database(options, credentials, destination) {
   if (!database || database.binding !== "DB") throw new Error("Generated Worker is missing its default D1 database binding.");
   if (database.database_id) return database.database_id;
 
-  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${credentials.CLOUDFLARE_ACCOUNT_ID}/d1/database`, {
+  const apiUrl = `https://api.cloudflare.com/client/v4/accounts/${credentials.CLOUDFLARE_ACCOUNT_ID}/d1/database`;
+  const headers = {
+    Authorization: `Bearer ${credentials.CLOUDFLARE_API_TOKEN}`,
+    "content-type": "application/json",
+  };
+  const existingResponse = await fetch(`${apiUrl}?name=${encodeURIComponent(database.database_name)}`, { headers });
+  const existingResult = await existingResponse.json().catch(() => ({}));
+  if (!existingResponse.ok || !existingResult.success) {
+    throw new Error(`Cloudflare D1 database lookup failed: ${existingResult.errors?.[0]?.message || existingResponse.status}`);
+  }
+  const existing = selectD1Database(existingResult.result || [], database.database_name);
+  if (existing?.uuid) {
+    await writeFile(configPath, wranglerConfig(options.workerName, existing.uuid));
+    return existing.uuid;
+  }
+
+  const response = await fetch(apiUrl, {
     method: "POST",
-    headers: {
-      Authorization: `Bearer ${credentials.CLOUDFLARE_API_TOKEN}`,
-      "content-type": "application/json",
-    },
+    headers,
     body: JSON.stringify({ name: database.database_name }),
   });
   const result = await response.json().catch(() => ({}));

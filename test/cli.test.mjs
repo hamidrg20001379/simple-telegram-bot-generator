@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, updateGeneratedWorkerSource, wranglerConfig, workerSource } from "../src/cli.mjs";
+import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, selectD1Database, updateGeneratedWorkerSource, wranglerConfig, workerSource } from "../src/cli.mjs";
 import { credentialInstructions, parseEnv, validateBotToken, validateCredential, validateWorkerName } from "../src/manager.mjs";
 
 test("Cloudflare token help states the minimum account permissions", () => {
@@ -46,6 +46,15 @@ test("generated Wrangler config includes a D1 database binding by default", () =
 test("generated Wrangler config uses the provisioned D1 database ID", () => {
   const config = wranglerConfig("my-first-bot", "01234567-89ab-cdef-0123-456789abcdef");
   assert.match(config, /\"database_id\": \"01234567-89ab-cdef-0123-456789abcdef\"/);
+});
+
+test("selectD1Database finds an existing database by name", () => {
+  const database = selectD1Database([
+    { name: "other-db", uuid: "other" },
+    { name: "my-first-bot-db", uuid: "existing-id" },
+  ], "my-first-bot-db");
+  assert.deepEqual(database, { name: "my-first-bot-db", uuid: "existing-id" });
+  assert.equal(selectD1Database([], "missing-db"), undefined);
 });
 
 test("existing generated Worker source receives the reply keyboard migration", () => {
