@@ -5,6 +5,9 @@
       "telegramWebhookSecret": "",
       "workerName": "my-first-bot",
       "webhookUrl": "https://my-first-bot.example.workers.dev/webhook",
+      "githubRepository": "example-owner/my-first-bot",
+      "githubUrl": "https://github.com/example-owner/my-first-bot",
+      "githubCloneUrl": "https://github.com/example-owner/my-first-bot.git",
       "updatedAt": ""
     }
   }

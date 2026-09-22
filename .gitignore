@@ -1,4 +1,5 @@
 .env
 .telegram-bots.json
+.telegram-manager-state.json
 node_modules/
 my-task-tracker/

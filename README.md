@@ -4,6 +4,60 @@ This command creates a small TypeScript Cloudflare Worker, a secure Telegram web
 
 With `--deploy`, the command asks for any missing Cloudflare account ID, Cloudflare API token, and Telegram bot token. It saves them, along with the webhook secret and URL, in the generated project's ignored `.env` file.
 
+## Central Telegram Bot Manager
+
+The repository also includes a persistent, owner-only Telegram control bot that replaces the normal CLI for day-to-day use. From Telegram it can:
+
+- create and deploy a generated bot;
+- list every managed bot and open its details;
+- check Worker health and Telegram webhook errors;
+- redeploy source changes;
+- pause, resume, or repair a webhook;
+- rotate a BotFather token and redeploy;
+- undeploy a Worker while preserving its private GitHub repository for later redeployment.
+
+Every generated bot gets its own private GitHub repository. Creation happens in a temporary directory, the source is pushed to GitHub, the Worker is deployed, and the temporary directory is removed. Redeploy performs a fresh temporary clone. No generated bot project is stored as a subfolder of this repository. The manager configures each repository's GitHub Actions secrets and `TELEGRAM_WEBHOOK_URL` variable before pushing the generated deployment workflow.
+
+### One-time bootstrap / راه‌اندازی اولیه
+
+The manager can request Cloudflare and GitHub credentials inside Telegram, but it cannot contact you until its own Telegram identity exists. Configure only these bootstrap values on the server:
+
+1. Open `@BotFather`, send `/newbot`, choose a display name, and choose a unique username ending in `bot`.
+2. Copy `.env.example` to `.env` and put BotFather's token in `MANAGER_TELEGRAM_BOT_TOKEN`.
+3. Put your numeric Telegram user ID in `MANAGER_TELEGRAM_OWNER_IDS`. Multiple owners may be comma-separated.
+4. If this server cannot contact `api.telegram.org`, set `TELEGRAM_API_BASE_URL` to the proxy prefix ending in `/bot`. The manager appends the token and method.
+5. Set the file mode to `0600`, then start the manager service.
+6. Send `/start` to the manager, choose English or Persian, and follow its guided instructions for every missing Cloudflare or GitHub value.
+
+مدیر می‌تواند اطلاعات Cloudflare و GitHub را داخل تلگرام مرحله‌به‌مرحله دریافت کند، اما برای شروع ارتباط باید ابتدا هویت تلگرامی خودش ساخته شود:
+
+۱. در `@BotFather` دستور `/newbot` را بفرستید، نام نمایشی و یک نام کاربری یکتا که به `bot` ختم می‌شود انتخاب کنید.
+۲. فایل `.env.example` را با نام `.env` کپی کرده و توکن BotFather را در `MANAGER_TELEGRAM_BOT_TOKEN` قرار دهید.
+۳. شناسه عددی تلگرام خود را در `MANAGER_TELEGRAM_OWNER_IDS` وارد کنید. برای چند مدیر، شناسه‌ها را با ویرگول جدا کنید.
+۴. اگر سرور به `api.telegram.org` دسترسی ندارد، مقدار `TELEGRAM_API_BASE_URL` را روی آدرس پراکسی که به `/bot` ختم می‌شود تنظیم کنید.
+۵. سطح دسترسی فایل را `0600` کرده و سرویس مدیر را اجرا کنید.
+۶. دستور `/start` را برای ربات مدیر بفرستید، زبان فارسی یا انگلیسی را انتخاب کنید و مراحل دریافت اطلاعات ناقص Cloudflare و GitHub را ادامه دهید.
+
+Deployment credentials are never committed to source. They are stored locally and encrypted into each generated private repository's GitHub Actions secrets. Secret-bearing Telegram messages are deleted after processing when Telegram permits it.
+
+Start it with:
+
+```bash
+npm run manager
+```
+
+For an always-on server installation, copy `deploy/simple-telegram-bot-manager.service` to `~/.config/systemd/user/`, then run:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now simple-telegram-bot-manager.service
+loginctl enable-linger "$USER"
+```
+
+The service restarts after failures and starts again after a server reboot.
+
+Use a dedicated BotFather bot for the manager. Do not reuse a managed bot token or another polling service will conflict with it. The local registry contains deployment metadata and bot credentials in an ignored owner-only file; generated source lives in each bot's private GitHub repository.
+
 ## Create a bot project
 
 ```powershell

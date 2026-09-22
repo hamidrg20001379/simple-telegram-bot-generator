@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { mkdir, writeFile, access, readFile } from "node:fs/promises";
+import { mkdir, writeFile, access, readFile, chmod } from "node:fs/promises";
 import { constants } from "node:fs";
 import { resolve } from "node:path";
 import { spawn } from "node:child_process";
@@ -18,7 +18,8 @@ export const cloudflareTokenHelp = `
 CLOUDFLARE_API_TOKEN is missing. Create one reusable token for this Cloudflare account:
   1. Cloudflare dashboard → Manage Account → Account API Tokens → Create Token.
   2. Name it telegram-worker-generator.
-  3. Add Account → Workers → Admin and Account → Account Settings → Read.
+  3. Add Account → Workers → Admin, Account → D1 → Edit (or D1 Write),
+     and Account → Account Settings → Read.
   4. Under Account Resources, include only the account where these bots will deploy.
   5. Create the token and copy it now; Cloudflare shows it only once.
 
@@ -266,7 +267,7 @@ async function scaffold(options) {
     writeFile(resolve(destination, "src", "index.ts"), workerSource),
     writeFile(resolve(destination, ".github", "workflows", "deploy.yml"), workflow),
     writeFile(resolve(destination, ".gitignore"), ".env\n.dev.vars\n.wrangler\nnode_modules\n"),
-    writeFile(resolve(destination, ".env"), "TELEGRAM_WEBHOOK_URL=\n"),
+    writeFile(resolve(destination, ".env"), "TELEGRAM_WEBHOOK_URL=\n", { mode: 0o600 }),
     writeFile(resolve(destination, ".dev.vars.example"), "TELEGRAM_BOT_TOKEN=replace-for-local-development\nTELEGRAM_WEBHOOK_SECRET=replace-for-local-development\n"),
     writeFile(resolve(destination, "README.md"), readme),
   ]);
@@ -359,6 +360,7 @@ async function deploymentEnvironment(options) {
     credentials: {
       ...values,
       TELEGRAM_WEBHOOK_SECRET: webhookSecret,
+      ...(valueFor("TELEGRAM_API_BASE_URL") ? { TELEGRAM_API_BASE_URL: valueFor("TELEGRAM_API_BASE_URL") } : {}),
     },
     generatedWebhookSecret: !valueFor("TELEGRAM_WEBHOOK_SECRET"),
   };
@@ -389,6 +391,7 @@ async function saveBotCredentials(workerName, webhookUrl, credentials) {
     updatedAt: new Date().toISOString(),
   };
   await writeFile(registryPath, `${JSON.stringify(registry, null, 2)}\n`, { mode: 0o600 });
+  await chmod(registryPath, 0o600);
 }
 
 async function workerUrl(options, credentials) {
@@ -408,7 +411,8 @@ async function workerUrl(options, credentials) {
 }
 
 async function registerWebhook(url, credentials) {
-  const response = await fetch(`https://api.telegram.org/bot${credentials.TELEGRAM_BOT_TOKEN}/setWebhook`, {
+  const telegramApiBaseUrl = (credentials.TELEGRAM_API_BASE_URL || "https://api.telegram.org/bot").replace(/\/$/, "");
+  const response = await fetch(`${telegramApiBaseUrl}${credentials.TELEGRAM_BOT_TOKEN}/setWebhook`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -439,7 +443,8 @@ async function deploy(options, destination, deployment) {
   const url = await workerUrl(options, credentials);
   console.log("Registering Telegram's webhook...");
   await registerWebhook(url, credentials);
-  await writeFile(resolve(destination, ".env"), projectEnvironment(credentials, url));
+  await writeFile(resolve(destination, ".env"), projectEnvironment(credentials, url), { mode: 0o600 });
+  await chmod(resolve(destination, ".env"), 0o600);
   await saveBotCredentials(options.workerName, url, credentials);
   console.log(`Done. Telegram now delivers updates to ${url}`);
   if (generatedWebhookSecret) {
@@ -455,7 +460,8 @@ async function main() {
   const { destination, created } = await scaffold(options);
   console.log(created ? `Created ${destination}` : `Using existing ${destination}`);
   if (options.deploy) {
-    await writeFile(resolve(destination, ".env"), projectEnvironment(credentials));
+    await writeFile(resolve(destination, ".env"), projectEnvironment(credentials), { mode: 0o600 });
+    await chmod(resolve(destination, ".env"), 0o600);
     await deploy(options, destination, credentials);
   }
   else console.log("Run npm install inside the new directory, or rerun with --deploy and your credentials.");

@@ -8,7 +8,11 @@
   },
   "scripts": {
     "create": "node src/cli.mjs",
+    "manager": "node src/manager.mjs",
     "test": "node --test"
+  },
+  "dependencies": {
+    "libsodium-wrappers": "^0.7.15"
   },
   "engines": {
     "node": ">=20"

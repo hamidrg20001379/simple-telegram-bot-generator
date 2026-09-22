@@ -1,0 +1,17 @@
+[Unit]
+Description=Central Telegram Bot Manager
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/root/projects/simple-telegram-bot-generator
+ExecStart=/usr/local/bin/node /root/projects/simple-telegram-bot-generator/src/manager.mjs
+Restart=always
+RestartSec=5
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target

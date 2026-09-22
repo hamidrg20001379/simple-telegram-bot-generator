@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment } from "../src/cli.mjs";
+import { credentialInstructions, parseEnv, validateBotToken, validateCredential, validateWorkerName } from "../src/manager.mjs";
 
 test("Cloudflare token help states the minimum account permissions", () => {
   assert.match(cloudflareTokenHelp, /Workers → Admin/);
+  assert.match(cloudflareTokenHelp, /D1 → Edit/);
   assert.match(cloudflareTokenHelp, /Account Settings → Read/);
   assert.match(cloudflareTokenHelp, /only the account/);
 });
@@ -32,4 +34,30 @@ test("deployment credentials are written to the generated project's ignored env 
   assert.match(env, /^CLOUDFLARE_ACCOUNT_ID="account"$/m);
   assert.match(env, /^TELEGRAM_BOT_TOKEN="bot:token"$/m);
   assert.match(env, /^TELEGRAM_WEBHOOK_URL="https:\/\/bot\.example\.com\/webhook"$/m);
+});
+
+test("manager parses quoted environment values", () => {
+  assert.deepEqual(parseEnv('A=plain\nB="two words"\n# ignored\n'), { A: "plain", B: "two words" });
+});
+
+test("manager accepts safe worker names and rejects paths", () => {
+  assert.equal(validateWorkerName("my-first-bot"), "my-first-bot");
+  assert.throws(() => validateWorkerName("../escape"), /lowercase/);
+});
+
+test("manager validates Telegram token shape", () => {
+  assert.equal(validateBotToken("123456789:abcdefghijklmnopqrstuvwxyz_ABC"), "123456789:abcdefghijklmnopqrstuvwxyz_ABC");
+  assert.throws(() => validateBotToken("not-a-token"), /does not look/);
+});
+
+test("manager validates deployment credentials before saving them", () => {
+  assert.equal(validateCredential("CLOUDFLARE_ACCOUNT_ID", "0123456789abcdef0123456789abcdef"), "0123456789abcdef0123456789abcdef");
+  assert.throws(() => validateCredential("CLOUDFLARE_ACCOUNT_ID", "short"), /32-character/);
+  assert.equal(validateCredential("GITHUB_TOKEN", `ghp_${"a".repeat(36)}`), `ghp_${"a".repeat(36)}`);
+});
+
+test("credential guidance is available in English and Persian", () => {
+  assert.match(credentialInstructions("GITHUB_TOKEN", "en"), /Personal access tokens/);
+  assert.match(credentialInstructions("GITHUB_TOKEN", "fa"), /توکن GitHub/);
+  assert.match(credentialInstructions("CLOUDFLARE_API_TOKEN", "fa"), /Workers Scripts/);
 });
