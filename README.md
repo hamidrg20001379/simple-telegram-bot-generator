@@ -11,7 +11,7 @@ The repository also includes a persistent, owner-only Telegram control bot that 
 - create and deploy a generated bot;
 - list every managed bot and open its details;
 - check Worker health and Telegram webhook errors;
-- redeploy source changes;
+- redeploy source changes; existing generated bots are migrated to the current default keyboard and D1 binding during redeploy;
 - pause, resume, or repair a webhook;
 - rotate a BotFather token and redeploy;
 - undeploy a Worker while preserving its private GitHub repository for later redeployment.

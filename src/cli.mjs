@@ -280,10 +280,64 @@ For a custom domain, use \`--webhook-url https://bot.example.com/webhook\` when 
 The included workflow deploys future commits. Before its first run, add repository secrets \`CLOUDFLARE_ACCOUNT_ID\`, \`CLOUDFLARE_API_TOKEN\`, \`TELEGRAM_BOT_TOKEN\`, and \`TELEGRAM_WEBHOOK_SECRET\`. If the generator created the webhook secret, it displayed that value at the end of the first deployment. Add the non-secret repository variable \`TELEGRAM_WEBHOOK_URL\` with this Worker's final URL ending in \`/webhook\`.
 `;
 
+export function updateGeneratedWorkerSource(source) {
+  let updated = source;
+  if (!updated.includes("DB: D1Database;")) {
+    updated = updated.replace(
+      "  TELEGRAM_WEBHOOK_SECRET: string;\n}",
+      "  TELEGRAM_WEBHOOK_SECRET: string;\n  DB: D1Database;\n}",
+    );
+  }
+  if (updated.includes("const replyKeyboard = {") || !updated.includes("async function sendMessage(env: Env, chatId: number, text: string)")) return updated;
+
+  updated = updated.replace(
+    "async function sendMessage(env: Env, chatId: number, text: string) {",
+    "async function sendMessage(env: Env, chatId: number, text: string, replyMarkup?: object) {",
+  );
+  updated = updated.replace(
+    "body: JSON.stringify({ chat_id: chatId, text }),",
+    "body: JSON.stringify({ chat_id: chatId, text, ...(replyMarkup ? { reply_markup: replyMarkup } : {}) }),",
+  );
+  updated = updated.replace(
+    "\n}\n\nasync function handleUpdate",
+    "\n}\n\nconst replyKeyboard = {\n  keyboard: [[\"📋 Menu\", \"ℹ️ Help\"]],\n  resize_keyboard: true,\n  is_persistent: true,\n};\n\nasync function handleUpdate",
+  );
+  updated = updated.replace(
+    new RegExp('(if \\(message\\.text === \\"/start\\"\\) \\{\\n\\s*await sendMessage\\(env, message\\.chat\\.id, [^;]+)(\\);)'),
+    "$1, replyKeyboard$2",
+  );
+  updated = updated.replace(
+    /  await sendMessage\(env, message\.chat\.id, `You said: \$\{message\.text\}`\);\n}/,
+    "  if (message.text === \"📋 Menu\") {\n    await sendMessage(env, message.chat.id, \"Menu: use the buttons below to interact with your bot.\", replyKeyboard);\n    return;\n  }\n\n  if (message.text === \"ℹ️ Help\") {\n    await sendMessage(env, message.chat.id, \"Send a message and I will echo it back to you.\", replyKeyboard);\n    return;\n  }\n\n  await sendMessage(env, message.chat.id, `You said: \\${message.text}`, replyKeyboard);\n}",
+  );
+  return updated;
+}
+
+async function migrateExistingProject(options, destination) {
+  const sourcePath = resolve(destination, "src", "index.ts");
+  try {
+    const source = await readFile(sourcePath, "utf8");
+    const updated = updateGeneratedWorkerSource(source);
+    if (updated !== source) await writeFile(sourcePath, updated);
+  } catch (error) {
+    if (error?.code !== "ENOENT") throw error;
+  }
+
+  const configPath = resolve(destination, "wrangler.jsonc");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  if (!Array.isArray(config.d1_databases) || !config.d1_databases.length) {
+    config.d1_databases = [{ binding: "DB", database_name: `${options.workerName}-db` }];
+    await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
+  }
+}
+
 async function scaffold(options) {
   const destination = resolve(options.directory ?? options.workerName);
   if (await pathExists(destination)) {
-    if (options.deploy && await pathExists(resolve(destination, "package.json"))) return { destination, created: false };
+    if (options.deploy && await pathExists(resolve(destination, "package.json"))) {
+      await migrateExistingProject(options, destination);
+      return { destination, created: false };
+    }
     throw new Error(`Destination already exists: ${destination}`);
   }
   await mkdir(resolve(destination, "src"), { recursive: true });

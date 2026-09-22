@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, wranglerConfig, workerSource } from "../src/cli.mjs";
+import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, updateGeneratedWorkerSource, wranglerConfig, workerSource } from "../src/cli.mjs";
 import { credentialInstructions, parseEnv, validateBotToken, validateCredential, validateWorkerName } from "../src/manager.mjs";
 
 test("Cloudflare token help states the minimum account permissions", () => {
@@ -46,6 +46,15 @@ test("generated Wrangler config includes a D1 database binding by default", () =
 test("generated Wrangler config uses the provisioned D1 database ID", () => {
   const config = wranglerConfig("my-first-bot", "01234567-89ab-cdef-0123-456789abcdef");
   assert.match(config, /\"database_id\": \"01234567-89ab-cdef-0123-456789abcdef\"/);
+});
+
+test("existing generated Worker source receives the reply keyboard migration", () => {
+  const oldSource = `interface Env {\n  TELEGRAM_BOT_TOKEN: string;\n  TELEGRAM_WEBHOOK_SECRET: string;\n}\n\nasync function sendMessage(env: Env, chatId: number, text: string) {\n  const response = await fetch(url, {\n    body: JSON.stringify({ chat_id: chatId, text }),\n  });\n}\n\nasync function handleUpdate(env: Env, update: TelegramUpdate) {\n  const message = update.message;\n  if (!message?.text) return;\n  if (message.text === \"/start\") {\n    await sendMessage(env, message.chat.id, \"Hello!\");\n    return;\n  }\n  await sendMessage(env, message.chat.id, \`You said: \${message.text}\`);\n}`;
+  const updated = updateGeneratedWorkerSource(oldSource);
+  assert.match(updated, /DB: D1Database/);
+  assert.match(updated, /replyKeyboard/);
+  assert.match(updated, /📋 Menu/);
+  assert.match(updated, /ℹ️ Help/);
 });
 
 test("generated Worker sends a reply keyboard below the Telegram chat", () => {
