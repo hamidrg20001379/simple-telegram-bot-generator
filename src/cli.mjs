@@ -459,6 +459,14 @@ async function deploy(options, destination, deployment) {
   const { credentials, generatedWebhookSecret } = deployment;
   console.log("Creating the Worker's default D1 database...");
   await provisionD1Database(options, credentials, destination);
+  if (await pathExists(resolve(destination, "migrations"))) {
+    const config = JSON.parse(await readFile(resolve(destination, "wrangler.jsonc"), "utf8"));
+    const databaseName = config.d1_databases?.[0]?.database_name;
+    if (databaseName) {
+      console.log("Applying the Worker's D1 migrations...");
+      await run("npx", ["wrangler", "d1", "migrations", "apply", databaseName, "--remote"], { cwd: destination, env: credentials });
+    }
+  }
   console.log("Installing the generated Worker's dependencies...");
   await run("npm", ["install"], { cwd: destination });
   console.log("Deploying the Worker...");
