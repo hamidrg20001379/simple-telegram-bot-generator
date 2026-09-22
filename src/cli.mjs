@@ -108,13 +108,19 @@ function packageJson(name) {
   }, null, 2) + "\n";
 }
 
-function wranglerConfig(name) {
+export function wranglerConfig(name, databaseId = null) {
+  const database = {
+    binding: "DB",
+    database_name: `${name}-db`,
+    ...(databaseId ? { database_id: databaseId } : {}),
+  };
   return `{
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "${name}",
   "main": "src/index.ts",
   "compatibility_date": "2026-09-14",
   "workers_dev": true,
+  "d1_databases": [${JSON.stringify(database, null, 2)}],
   "observability": {
     "enabled": true
   }
@@ -125,6 +131,7 @@ function wranglerConfig(name) {
 const workerSource = `interface Env {
   TELEGRAM_BOT_TOKEN: string;
   TELEGRAM_WEBHOOK_SECRET: string;
+  DB: D1Database;
 }
 
 type TelegramUpdate = {
@@ -236,7 +243,7 @@ jobs:
 
 const readme = `# Generated Telegram Worker
 
-This Worker accepts Telegram webhooks at \`/webhook\`, validates Telegram's secret header, and echoes received text.
+This Worker accepts Telegram webhooks at \`/webhook\`, validates Telegram's secret header, echoes received text, and includes a default Cloudflare D1 database binding named \`DB\`.
 
 ## Local development
 
@@ -309,6 +316,29 @@ async function localEnvironment(path = resolve(process.cwd(), ".env")) {
     if (error && typeof error === "object" && error.code === "ENOENT") return {};
     throw error;
   }
+}
+
+async function provisionD1Database(options, credentials, destination) {
+  const configPath = resolve(destination, "wrangler.jsonc");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  const database = config.d1_databases?.[0];
+  if (!database || database.binding !== "DB") throw new Error("Generated Worker is missing its default D1 database binding.");
+  if (database.database_id) return database.database_id;
+
+  const response = await fetch(`https://api.cloudflare.com/client/v4/accounts/${credentials.CLOUDFLARE_ACCOUNT_ID}/d1/database`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${credentials.CLOUDFLARE_API_TOKEN}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ name: database.database_name }),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok || !result.success || !result.result?.uuid) {
+    throw new Error(`Cloudflare D1 database creation failed: ${result.errors?.[0]?.message || response.status}`);
+  }
+  await writeFile(configPath, wranglerConfig(options.workerName, result.result.uuid));
+  return result.result.uuid;
 }
 
 export function maskTerminalInput(value) {
@@ -427,6 +457,8 @@ async function registerWebhook(url, credentials) {
 
 async function deploy(options, destination, deployment) {
   const { credentials, generatedWebhookSecret } = deployment;
+  console.log("Creating the Worker's default D1 database...");
+  await provisionD1Database(options, credentials, destination);
   console.log("Installing the generated Worker's dependencies...");
   await run("npm", ["install"], { cwd: destination });
   console.log("Deploying the Worker...");

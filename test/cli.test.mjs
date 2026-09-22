@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment } from "../src/cli.mjs";
+import { cloudflareTokenHelp, commandInvocation, maskTerminalInput, projectEnvironment, wranglerConfig } from "../src/cli.mjs";
 import { credentialInstructions, parseEnv, validateBotToken, validateCredential, validateWorkerName } from "../src/manager.mjs";
 
 test("Cloudflare token help states the minimum account permissions", () => {
@@ -34,6 +34,18 @@ test("deployment credentials are written to the generated project's ignored env 
   assert.match(env, /^CLOUDFLARE_ACCOUNT_ID="account"$/m);
   assert.match(env, /^TELEGRAM_BOT_TOKEN="bot:token"$/m);
   assert.match(env, /^TELEGRAM_WEBHOOK_URL="https:\/\/bot\.example\.com\/webhook"$/m);
+});
+
+test("generated Wrangler config includes a D1 database binding by default", () => {
+  const config = wranglerConfig("my-first-bot");
+  assert.match(config, /\"d1_databases\"/);
+  assert.match(config, /\"binding\": \"DB\"/);
+  assert.match(config, /\"database_name\": \"my-first-bot-db\"/);
+});
+
+test("generated Wrangler config uses the provisioned D1 database ID", () => {
+  const config = wranglerConfig("my-first-bot", "01234567-89ab-cdef-0123-456789abcdef");
+  assert.match(config, /\"database_id\": \"01234567-89ab-cdef-0123-456789abcdef\"/);
 });
 
 test("manager parses quoted environment values", () => {
